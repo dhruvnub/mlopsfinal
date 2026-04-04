@@ -1,0 +1,28 @@
+# environment.yml — Experiment 1: Conda environment
+# Offline: conda env create -f environment.yml
+#          conda activate placement-mlops
+# Online:  Registered as Azure ML Environment (see azure_env.yml)
+
+name: placement-mlops
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - pandas
+      - scikit-learn
+      - mlflow
+      - fastapi
+      - uvicorn
+      - joblib
+      - pydantic
+      - pytest
+      - httpx
+      - python-multipart
+      - dvc
+      - dvc-azure
+      - azure-ai-ml
+      - azure-identity
+      - flake8

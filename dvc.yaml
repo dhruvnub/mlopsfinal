@@ -1,0 +1,30 @@
+# dvc.yaml — Experiment 7: Manage data/models using DVC
+# Azure Blob Storage as remote (Experiment 7 Online Setup)
+#
+# SETUP:
+#   dvc init
+#   dvc remote add -d azureblob azure://placement-dvc/storage
+#   dvc remote modify azureblob connection_string "YOUR_AZURE_STORAGE_CONNECTION_STRING"
+#   git add .dvc .dvcignore .gitignore
+#   git commit -m "init dvc with azure remote"
+#
+# USAGE:
+#   dvc repro          ← runs pipeline (only reruns changed stages)
+#   dvc push           ← uploads data + model to Azure Blob
+#   dvc pull           ← downloads from Azure Blob (for teammates)
+#   dvc status         ← shows what has changed
+
+stages:
+
+  train:
+    cmd: python train.py
+    deps:
+      - train.py
+      - data/placementdata.csv
+    outs:
+      - models/model.pkl
+      - models/metadata.json
+    params:
+      - params.yaml:
+          - model.n_estimators
+          - model.max_depth

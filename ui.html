@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Placement MLOps Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070d1a;--surface:#0d1526;--card:#111f35;--border:#1a2f4a;
+  --accent:#2563eb;--cyan:#06b6d4;--green:#10b981;--red:#ef4444;
+  --amber:#f59e0b;--purple:#8b5cf6;
+  --text:#e2e8f0;--muted:#4b6280;--subtle:#8ba3bf;
+  --mono:'IBM Plex Mono',monospace;--sans:'Plus Jakarta Sans',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+
+/* ── Grid BG ── */
+body::before{content:'';position:fixed;inset:0;
+  background-image:radial-gradient(circle at 20% 20%,rgba(37,99,235,.06) 0%,transparent 50%),
+    radial-gradient(circle at 80% 80%,rgba(6,182,212,.04) 0%,transparent 50%),
+    linear-gradient(var(--border) 1px,transparent 1px),
+    linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:100% 100%,100% 100%,48px 48px,48px 48px;opacity:.35;pointer-events:none}
+
+/* ── Header ── */
+header{position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border);
+  background:rgba(7,13,26,.92);backdrop-filter:blur(16px);
+  padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.logo{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:3px;
+  color:var(--accent);text-transform:uppercase;white-space:nowrap}
+.logo em{color:var(--cyan);font-style:normal}
+.hdr-right{display:flex;align-items:center;gap:20px}
+.api-pill{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;
+  padding:6px 12px;border:1px solid var(--border);border-radius:99px;color:var(--subtle)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:all .4s}
+.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off{background:var(--red)}
+
+/* ── Layout ── */
+main{max-width:1280px;margin:0 auto;padding:32px 24px;display:grid;
+  grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto;gap:20px}
+.c1{grid-column:1}
+.c2{grid-column:2}
+.c3{grid-column:3}
+.span2{grid-column:span 2}
+.span3{grid-column:1/-1}
+
+/* ── Cards ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:24px;position:relative;overflow:hidden;
+  animation:fadeUp .5s ease both}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  opacity:0;transition:opacity .3s}
+.card:hover::after{opacity:.6}
+.clabel{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--muted);
+  text-transform:uppercase;margin-bottom:12px}
+.ctitle{font-size:15px;font-weight:600;color:var(--text);margin-bottom:18px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Azure Pipeline banner ── */
+.pipe-banner{background:linear-gradient(135deg,rgba(37,99,235,.12),rgba(6,182,212,.08));
+  border:1px solid rgba(37,99,235,.3);border-radius:14px;padding:20px 24px;
+  grid-column:1/-1;animation:fadeUp .3s ease both}
+.pipe-title{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--cyan);
+  text-transform:uppercase;margin-bottom:14px}
+.pipe-flow{display:flex;align-items:center;flex-wrap:wrap;gap:0;row-gap:10px}
+.pstep{display:flex;align-items:center;gap:8px;padding:9px 14px;
+  border-radius:8px;font-family:var(--mono);font-size:11px;border:1px solid var(--border);
+  background:var(--surface);white-space:nowrap;transition:all .3s}
+.pstep.azure{border-color:rgba(37,99,235,.5);color:var(--accent)}
+.pstep.done{border-color:var(--green);color:var(--green)}
+.pstep.live{border-color:var(--cyan);color:var(--cyan);
+  box-shadow:0 0 14px rgba(6,182,212,.2);animation:pulse 2s infinite}
+.pstep .ico{font-size:15px}
+.parr{color:var(--muted);padding:0 6px;font-size:16px}
+@keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(6,182,212,.2)}50%{box-shadow:0 0 20px rgba(6,182,212,.4)}}
+
+/* ── Metric boxes ── */
+.metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;grid-column:1/-1}
+.mbox{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:16px;text-align:center;transition:border-color .3s}
+.mbox:hover{border-color:var(--accent)}
+.mval{font-family:var(--mono);font-size:24px;font-weight:600;color:var(--accent);
+  display:block;transition:all .5s}
+.mlbl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.msub{font-size:11px;color:var(--subtle);margin-top:2px;font-family:var(--mono)}
+
+/* ── Form ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field label{display:block;font-size:10px;font-family:var(--mono);color:var(--muted);
+  letter-spacing:1.5px;text-transform:uppercase;margin-bottom:5px}
+.field input{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:10px 13px;color:var(--text);font-family:var(--mono);
+  font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s}
+.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.btn-predict{margin-top:16px;width:100%;padding:13px;border:none;border-radius:9px;
+  background:linear-gradient(135deg,var(--accent),var(--cyan));color:#fff;
+  font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:2px;
+  text-transform:uppercase;cursor:pointer;transition:opacity .2s,transform .1s}
+.btn-predict:hover{opacity:.9}
+.btn-predict:active{transform:scale(.99)}
+.btn-predict:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Result ── */
+.result{margin-top:16px;background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:18px;display:none}
+.result.show{display:block;animation:fadeUp .4s ease}
+.r-status{font-family:var(--mono);font-size:20px;font-weight:600}
+.r-status.placed{color:var(--green)}
+.r-status.noplaced{color:var(--red)}
+.r-sub{font-size:12px;color:var(--subtle);margin-top:4px;font-family:var(--mono)}
+.pbar-wrap{margin-top:14px}
+.pbar-lbl{display:flex;justify-content:space-between;font-size:10px;
+  font-family:var(--mono);color:var(--muted);margin-bottom:5px}
+.pbar{height:6px;background:var(--border);border-radius:99px;overflow:hidden}
+.pfill{height:100%;border-radius:99px;width:0;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.err{margin-top:12px;color:var(--red);font-size:11px;font-family:var(--mono);display:none}
+.err.show{display:block}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.2);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;
+  vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── History ── */
+.hist-list{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto}
+.hist-list::-webkit-scrollbar{width:4px}
+.hist-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+.hitem{display:flex;justify-content:space-between;align-items:center;
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+  font-size:12px;gap:10px}
+.hitem.placed{border-left:3px solid var(--green)}
+.hitem.noplaced{border-left:3px solid var(--red)}
+.hcgpa{font-family:var(--mono);color:var(--subtle);font-size:11px}
+.hstatus{font-family:var(--mono);font-size:11px;font-weight:600}
+.hstatus.p{color:var(--green)}
+.hstatus.n{color:var(--red)}
+.hprob{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.no-hist{color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px 0}
+
+/* ── Experiments table ── */
+.exp-table{width:100%;border-collapse:collapse;font-size:12px}
+.exp-table th{text-align:left;padding:10px 12px;font-family:var(--mono);font-size:9px;
+  letter-spacing:2px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.exp-table td{padding:11px 12px;border-bottom:1px solid rgba(26,47,74,.5);vertical-align:top}
+.exp-table tr:last-child td{border-bottom:none}
+.exp-table tr:hover td{background:rgba(255,255,255,.01)}
+.exp-num{font-family:var(--mono);color:var(--muted);font-size:11px}
+.exp-name{font-weight:500;color:var(--text)}
+.exp-detail{font-size:11px;color:var(--subtle);margin-top:2px;font-family:var(--mono)}
+.exp-az{font-size:11px;color:var(--cyan)}
+.badge{display:inline-block;padding:3px 9px;border-radius:99px;font-size:10px;
+  font-family:var(--mono);font-weight:600;letter-spacing:.5px}
+.b-done{background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.2)}
+.b-azure{background:rgba(37,99,235,.12);color:var(--accent);border:1px solid rgba(37,99,235,.2)}
+.b-local{background:rgba(139,92,246,.12);color:var(--purple);border:1px solid rgba(139,92,246,.2)}
+.b-live{background:rgba(6,182,212,.12);color:var(--cyan);border:1px solid rgba(6,182,212,.2)}
+
+/* ── Links ── */
+.links-grid{display:flex;flex-direction:column;gap:9px}
+.lnk{display:flex;align-items:center;justify-content:space-between;
+  background:var(--surface);border:1px solid var(--border);border-radius:9px;
+  padding:12px 16px;transition:border-color .2s,transform .15s}
+.lnk:hover{border-color:var(--accent);transform:translateX(2px)}
+.lnk-name{font-size:13px;font-weight:500;color:var(--text)}
+.lnk-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.lnk a{color:var(--accent);font-family:var(--mono);font-size:11px;
+  text-decoration:none;white-space:nowrap}
+.lnk a:hover{color:var(--cyan)}
+.lnk-azure a{color:var(--cyan)}
+
+@media(max-width:900px){
+  main{grid-template-columns:1fr 1fr}
+  .c3,.span3{grid-column:1/-1}
+  .span2{grid-column:1/-1}
+  .metric-row{grid-template-columns:1fr 1fr}
+}
+@media(max-width:600px){
+  main{grid-template-columns:1fr}
+  .c1,.c2,.c3,.span2,.span3{grid-column:1}
+  header{padding:12px 16px}
+  .form-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Placement<em>MLOps</em> <span style="color:var(--muted);font-size:10px;margin-left:8px">// Azure-Powered</span></div>
+  <div class="hdr-right">
+    <div class="api-pill"><div class="dot" id="dot"></div><span id="apiTxt">checking...</span></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Azure Pipeline Banner ── -->
+  <div class="pipe-banner" style="animation-delay:.05s">
+    <div class="pipe-title">Experiment 2 — GitHub Actions → Azure ML Pipeline</div>
+    <div class="pipe-flow">
+      <div class="pstep done"><span class="ico">📦</span>Git + Conda</div>
+      <div class="parr">→</div>
+      <div class="pstep done"><span class="ico">🧪</span>Lint & Test</div>
+      <div class="parr">→</div>
+      <div class="pstep azure"><span class="ico">☁️</span>Azure ML Train</div>
+      <div class="parr">→</div>
+      <div class="pstep azure"><span class="ico">🔍</span>Quality Gate</div>
+      <div class="parr">→</div>
+      <div class="pstep azure"><span class="ico">🐳</span>Push → ACR</div>
+      <div class="parr">→</div>
+      <div class="pstep azure"><span class="ico">🚀</span>Azure App Service</div>
+      <div class="parr">→</div>
+      <div class="pstep live"><span class="ico">✅</span>API Live</div>
+    </div>
+  </div>
+
+  <!-- ── Metric Row ── -->
+  <div class="metric-row" style="animation-delay:.1s">
+    <div class="mbox">
+      <span class="mval" id="mAcc">—</span>
+      <div class="mlbl">Accuracy</div>
+      <div class="msub" id="mAccSub">awaiting model</div>
+    </div>
+    <div class="mbox">
+      <span class="mval" id="mF1" style="color:var(--cyan)">—</span>
+      <div class="mlbl">F1 Score</div>
+      <div class="msub" id="mF1Sub">awaiting model</div>
+    </div>
+    <div class="mbox">
+      <span class="mval" id="mRoc" style="color:var(--green)">—</span>
+      <div class="mlbl">ROC-AUC</div>
+      <div class="msub" id="mRocSub">awaiting model</div>
+    </div>
+    <div class="mbox">
+      <span class="mval" id="mType" style="color:var(--purple);font-size:14px">—</span>
+      <div class="mlbl">Best Model</div>
+      <div class="msub" id="mRunId">run id: —</div>
+    </div>
+  </div>
+
+  <!-- ── Predict Form ── -->
+  <div class="card span2" style="animation-delay:.15s">
+    <div class="clabel">Experiment 4 — FastAPI Inference</div>
+    <div class="ctitle">Predict Student Placement</div>
+    <div class="form-grid">
+      <div class="field"><label>CGPA (0–10)</label>
+        <input type="number" id="f-cgpa" value="8.5" step="0.1" min="0" max="10"/></div>
+      <div class="field"><label>Internships</label>
+        <input type="number" id="f-intern" value="2" min="0" max="10"/></div>
+      <div class="field"><label>Projects</label>
+        <input type="number" id="f-proj" value="3" min="0" max="20"/></div>
+      <div class="field"><label>Aptitude Score (0–100)</label>
+        <input type="number" id="f-apt" value="80" min="0" max="100"/></div>
+      <div class="field"><label>Soft Skills (0–5)</label>
+        <input type="number" id="f-soft" value="4.2" step="0.1" min="0" max="5"/></div>
+      <div class="field"><label>SSC Marks (0–100)</label>
+        <input type="number" id="f-ssc" value="78" min="0" max="100"/></div>
+      <div class="field" style="grid-column:1/-1"><label>HSC Marks (0–100)</label>
+        <input type="number" id="f-hsc" value="75" min="0" max="100"/></div>
+    </div>
+    <button class="btn-predict" id="btnPredict" onclick="doPredict()">▶ &nbsp;Run Prediction</button>
+    <div class="err" id="errMsg"></div>
+    <div class="result" id="resultBox">
+      <div class="r-status" id="rStatus"></div>
+      <div class="r-sub" id="rSub"></div>
+      <div class="pbar-wrap">
+        <div class="pbar-lbl"><span>Placement Probability</span><span id="rPct">0%</span></div>
+        <div class="pbar"><div class="pfill" id="rFill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Prediction History ── -->
+  <div class="card c3" style="animation-delay:.18s">
+    <div class="clabel">Session History</div>
+    <div class="ctitle">Recent Predictions</div>
+    <div class="hist-list" id="histList">
+      <div class="no-hist">No predictions yet.<br/>Fill the form and click predict.</div>
+    </div>
+  </div>
+
+  <!-- ── Experiments Table ── -->
+  <div class="card span3" style="animation-delay:.22s">
+    <div class="clabel">All 8 Experiments</div>
+    <div class="ctitle">Coverage & Azure Integration Map</div>
+    <table class="exp-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Experiment</th><th>Key Files</th><th>Azure Integration</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="exp-num">01</td>
+          <td><div class="exp-name">Git + Conda Setup</div><div class="exp-detail">environment.yml · .gitignore · params.yaml</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">environment.yml</span></td>
+          <td><div class="exp-az">Azure ML Environment registration</div></td>
+          <td><span class="badge b-done">✓ Done</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">02</td>
+          <td><div class="exp-name">GitHub Actions CI/CD</div><div class="exp-detail">5-stage pipeline with quality gate</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">.github/workflows/pipeline.yml</span></td>
+          <td><div class="exp-az">Trains on Azure ML · Pushes to ACR · Deploys to App Service</div></td>
+          <td><span class="badge b-azure">Azure</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">03</td>
+          <td><div class="exp-name">Jenkins Automation</div><div class="exp-detail">Jenkins → Azure ML training job</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">Jenkinsfile · azure_ml_job.py</span></td>
+          <td><div class="exp-az">Submits job to Azure ML workspace · Pushes image to ACR</div></td>
+          <td><span class="badge b-azure">Azure</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">04</td>
+          <td><div class="exp-name">FastAPI Inference API</div><div class="exp-detail">Single + batch prediction endpoints</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">app.py</span></td>
+          <td><div class="exp-az">Deployed to Azure App Service</div></td>
+          <td><span class="badge b-live" id="exp4badge">Checking...</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">05</td>
+          <td><div class="exp-name">Docker Containerization</div><div class="exp-detail">Image with healthcheck · .dockerignore</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">Dockerfile · .dockerignore</span></td>
+          <td><div class="exp-az">Pushed to Azure Container Registry (ACR)</div></td>
+          <td><span class="badge b-azure">Azure ACR</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">06</td>
+          <td><div class="exp-name">MLflow Experiment Tracking</div><div class="exp-detail">Tracks 2 models per run · best model selected</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">train.py</span></td>
+          <td><div class="exp-az">MLFLOW_TRACKING_URI → Azure ML workspace</div></td>
+          <td><span class="badge b-azure">Azure ML</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">07</td>
+          <td><div class="exp-name">DVC Data Versioning</div><div class="exp-detail">Pipeline stages · params tracking</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">dvc.yaml · params.yaml</span></td>
+          <td><div class="exp-az">dvc remote → Azure Blob Storage</div></td>
+          <td><span class="badge b-azure">Azure Blob</span></td>
+        </tr>
+        <tr>
+          <td class="exp-num">08</td>
+          <td><div class="exp-name">MLflow Model Registry</div><div class="exp-detail">Best model auto-registered</div></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--subtle)">train.py (registered_model_name)</span></td>
+          <td><div class="exp-az">Registered in Azure ML Model Registry</div></td>
+          <td><span class="badge b-azure">Azure ML</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Live Links ── -->
+  <div class="card span3" style="animation-delay:.26s">
+    <div class="clabel">Live Services</div>
+    <div class="ctitle">Open in Browser</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div class="lnk">
+        <div><div class="lnk-name">FastAPI — Swagger UI</div><div class="lnk-desc">Live prediction endpoint docs</div></div>
+        <a href="http://127.0.0.1:8000/docs" target="_blank">:8000/docs →</a>
+      </div>
+      <div class="lnk">
+        <div><div class="lnk-name">MLflow UI</div><div class="lnk-desc">Experiment runs + model registry</div></div>
+        <a href="http://127.0.0.1:5000" target="_blank">:5000 →</a>
+      </div>
+      <div class="lnk lnk-azure">
+        <div><div class="lnk-name">Azure ML Studio</div><div class="lnk-desc">Runs, registry, compute, deployments</div></div>
+        <a href="https://ml.azure.com" target="_blank">ml.azure.com →</a>
+      </div>
+      <div class="lnk lnk-azure">
+        <div><div class="lnk-name">Azure Container Registry</div><div class="lnk-desc">Docker images pushed by pipeline</div></div>
+        <a href="https://portal.azure.com" target="_blank">portal.azure.com →</a>
+      </div>
+      <div class="lnk lnk-azure">
+        <div><div class="lnk-name">Azure App Service</div><div class="lnk-desc">Live deployed API</div></div>
+        <a href="https://placement-api-app.azurewebsites.net/docs" target="_blank">azurewebsites.net →</a>
+      </div>
+      <div class="lnk">
+        <div><div class="lnk-name">GitHub Actions</div><div class="lnk-desc">CI/CD pipeline runs</div></div>
+        <a href="https://github.com" target="_blank">github.com →</a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+let history = [];
+
+// ── Health check ──────────────────────────────────────────────────────────
+async function checkHealth() {
+  const dot = document.getElementById('dot');
+  const txt = document.getElementById('apiTxt');
+  const b4  = document.getElementById('exp4badge');
+  try {
+    const r = await fetch(API + '/health', {signal: AbortSignal.timeout(3000)});
+    if (r.ok) {
+      dot.className = 'dot on';
+      txt.textContent = 'API Online — localhost:8000';
+      b4.textContent = '✓ Live';
+      b4.className = 'badge b-done';
+      loadMetrics();
+    } else throw new Error();
+  } catch {
+    dot.className = 'dot off';
+    txt.textContent = 'API Offline';
+    b4.textContent = '✗ Offline';
+    b4.className = 'badge';
+    b4.style.background = 'rgba(239,68,68,.12)';
+    b4.style.color = 'var(--red)';
+    b4.style.border = '1px solid rgba(239,68,68,.2)';
+  }
+}
+
+// ── Load metrics from /model/info ─────────────────────────────────────────
+async function loadMetrics() {
+  try {
+    const r = await fetch(API + '/model/info');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.metrics) {
+      const m = d.metrics;
+      animateVal('mAcc', m.accuracy != null ? (m.accuracy*100).toFixed(1)+'%' : '—');
+      animateVal('mF1',  m.f1       != null ? (m.f1*100).toFixed(1)+'%'       : '—');
+      animateVal('mRoc', m.roc_auc  != null ? (m.roc_auc*100).toFixed(1)+'%'  : '—');
+      document.getElementById('mAccSub').textContent = 'test set';
+      document.getElementById('mF1Sub').textContent  = 'weighted';
+      document.getElementById('mRocSub').textContent = 'area under curve';
+    }
+    if (d.model_type) {
+      animateVal('mType', d.model_type.replace(/([A-Z])/g,' $1').trim());
+    }
+    if (d.run_id) {
+      document.getElementById('mRunId').textContent = 'run: ' + d.run_id.slice(0,8) + '...';
+    }
+  } catch {}
+}
+
+function animateVal(id, val) {
+  const el = document.getElementById(id);
+  el.style.opacity = '0';
+  setTimeout(() => { el.textContent = val; el.style.opacity = '1'; }, 150);
+}
+
+// ── Predict ───────────────────────────────────────────────────────────────
+async function doPredict() {
+  const btn  = document.getElementById('btnPredict');
+  const err  = document.getElementById('errMsg');
+  const box  = document.getElementById('resultBox');
+  const orig = btn.innerHTML;
+
+  err.className = 'err';
+  btn.disabled  = true;
+  btn.innerHTML = '<span class="spinner"></span>Predicting...';
+
+  const payload = {
+    CGPA:              parseFloat(document.getElementById('f-cgpa').value),
+    Internships:       parseInt(document.getElementById('f-intern').value),
+    Projects:          parseInt(document.getElementById('f-proj').value),
+    AptitudeTestScore: parseInt(document.getElementById('f-apt').value),
+    SoftSkillsRating:  parseFloat(document.getElementById('f-soft').value),
+    SSC_Marks:         parseInt(document.getElementById('f-ssc').value),
+    HSC_Marks:         parseInt(document.getElementById('f-hsc').value),
+  };
+
+  try {
+    const r = await fetch(API + '/predict', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload), signal:AbortSignal.timeout(8000)
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'API error'); }
+
+    const data = await r.json();
+    const placed = data.placement_status === 'Placed';
+    const pct    = Math.round(data.probability_placed * 100);
+
+    document.getElementById('rStatus').textContent = data.placement_status;
+    document.getElementById('rStatus').className   = 'r-status ' + (placed ? 'placed' : 'noplaced');
+    document.getElementById('rSub').textContent    =
+      `Confidence: ${data.confidence} · Model: ${data.model_type || 'RF'} · Run: ${(data.run_id||'').slice(0,8)}`;
+    document.getElementById('rPct').textContent    = pct + '%';
+    document.getElementById('rFill').style.width   = pct + '%';
+    document.getElementById('rFill').style.background = placed
+      ? 'linear-gradient(90deg,var(--accent),var(--green))'
+      : 'linear-gradient(90deg,var(--amber),var(--red))';
+    box.className = 'result show';
+
+    // Add to history
+    history.unshift({
+      cgpa: payload.CGPA, status: data.placement_status,
+      prob: pct, placed
+    });
+    renderHistory();
+
+  } catch(e) {
+    err.textContent = '⚠ ' + (
+      e.message.includes('fetch') || e.message.includes('signal')
+        ? 'API offline. Run: uvicorn app:app --reload'
+        : e.message
+    );
+    err.className = 'err show';
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ── History ───────────────────────────────────────────────────────────────
+function renderHistory() {
+  const el = document.getElementById('histList');
+  if (history.length === 0) {
+    el.innerHTML = '<div class="no-hist">No predictions yet.</div>';
+    return;
+  }
+  el.innerHTML = history.slice(0, 10).map(h => `
+    <div class="hitem ${h.placed ? 'placed' : 'noplaced'}">
+      <div class="hcgpa">CGPA ${h.cgpa}</div>
+      <div class="hstatus ${h.placed ? 'p' : 'n'}">${h.status}</div>
+      <div class="hprob">${h.prob}%</div>
+    </div>
+  `).join('');
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Enter') doPredict(); });
+checkHealth();
+setInterval(checkHealth, 12000);
+</script>
+</body>
+</html>

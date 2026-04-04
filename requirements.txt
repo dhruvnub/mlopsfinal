@@ -1,0 +1,15 @@
+pandas
+scikit-learn
+mlflow
+fastapi
+uvicorn
+joblib
+pydantic
+pytest
+httpx
+python-multipart
+dvc
+dvc-azure
+azure-ai-ml
+azure-identity
+flake8

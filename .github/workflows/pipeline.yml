@@ -1,0 +1,205 @@
+# .github/workflows/pipeline.yml
+# Experiment 2: GitHub Actions → Azure ML Pipeline
+#
+# GITHUB SECRETS TO ADD (repo → Settings → Secrets → Actions):
+#   AZURE_CLIENT_ID              ← Service Principal Client ID
+#   AZURE_CLIENT_SECRET          ← Service Principal Secret
+#   AZURE_TENANT_ID              ← Azure Tenant ID
+#   AZURE_SUBSCRIPTION_ID        ← Azure Subscription ID
+#   AZURE_RESOURCE_GROUP         ← e.g. mlops-rg
+#   AZURE_ML_WORKSPACE           ← e.g. placement-workspace
+#   ACR_LOGIN_SERVER             ← e.g. placementmlops.azurecr.io
+#   ACR_USERNAME                 ← from ACR → Access Keys
+#   ACR_PASSWORD                 ← from ACR → Access Keys
+#   AZURE_WEBAPP_PUBLISH_PROFILE ← from App Service → Download Publish Profile
+
+name: Placement MLOps — Azure Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+
+  # ── 1. Lint & Test ─────────────────────────────────────────────────────────
+  test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: flake8 train.py app.py azure_ml_job.py --max-line-length=100 --ignore=E501,W503
+
+      - name: Run unit tests
+        run: pytest tests/ -v --tb=short
+
+
+  # ── 2. Train on Azure ML ───────────────────────────────────────────────────
+  train-azure:
+    name: Train on Azure ML
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Submit training job to Azure ML workspace
+      - name: Submit Azure ML Training Job
+        run: |
+          python azure_ml_job.py \
+            --client-id       ${{ secrets.AZURE_CLIENT_ID }}       \
+            --client-secret   ${{ secrets.AZURE_CLIENT_SECRET }}   \
+            --tenant-id       ${{ secrets.AZURE_TENANT_ID }}       \
+            --subscription-id ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --resource-group  ${{ secrets.AZURE_RESOURCE_GROUP }}  \
+            --workspace       ${{ secrets.AZURE_ML_WORKSPACE }}    \
+            --experiment      placement-prediction                  \
+            --compute         cpu-cluster
+
+      # Also train locally so we have a model artifact for Docker build
+      - name: Train locally for artifact
+        run: python train.py
+        env:
+          MLFLOW_TRACKING_URI: mlruns
+
+      - name: Print model metrics
+        run: |
+          echo "======= Model Metrics ======="
+          cat models/metadata.json
+          echo "============================="
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: placement-model
+          path: |
+            models/model.pkl
+            models/metadata.json
+          retention-days: 7
+
+
+  # ── 3. Quality Gate ────────────────────────────────────────────────────────
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: train-azure
+    steps:
+      - name: Download model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: placement-model
+          path: models/
+
+      - name: Enforce F1 threshold
+        run: |
+          python - <<'EOF'
+          import json, sys
+          with open("models/metadata.json") as f:
+              meta = json.load(f)
+          acc = meta["metrics"]["accuracy"]
+          f1  = meta["metrics"]["f1"]
+          roc = meta["metrics"]["roc_auc"]
+          threshold = 0.75
+          print(f"  Model      : {meta['model_type']}")
+          print(f"  Accuracy   : {acc}")
+          print(f"  F1 Score   : {f1}")
+          print(f"  ROC-AUC    : {roc}")
+          print(f"  Threshold  : {threshold}")
+          if f1 < threshold:
+              print(f"\nQUALITY GATE FAILED: F1={f1} < required {threshold}")
+              print("Deployment blocked.")
+              sys.exit(1)
+          print(f"\nQUALITY GATE PASSED: F1={f1} >= {threshold}")
+          print("Proceeding to Docker build...")
+          EOF
+
+
+  # ── 4. Docker Build + Push to Azure Container Registry ────────────────────
+  docker:
+    name: Build and Push to ACR
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: placement-model
+          path: models/
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username:     ${{ secrets.ACR_USERNAME }}
+          password:     ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:latest \
+            -t ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:${{ github.sha }} \
+            .
+
+      - name: Push to Azure Container Registry
+        run: |
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:latest
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:${{ github.sha }}
+
+      - name: Image summary
+        run: |
+          echo "Image pushed to Azure ACR:"
+          echo "  latest → ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:latest"
+          echo "  sha    → ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:${{ github.sha }}"
+
+
+  # ── 5. Deploy to Azure App Service ────────────────────────────────────────
+  deploy:
+    name: Deploy to Azure App Service
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Deploy container to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name:        placement-api-app
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          images:          ${{ secrets.ACR_LOGIN_SERVER }}/placement-api:${{ github.sha }}
+
+      - name: Verify deployment health
+        run: |
+          echo "Waiting 40s for app to start..."
+          sleep 40
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://placement-api-app.azurewebsites.net/health)
+          if [ "$STATUS" = "200" ]; then
+            echo "Deployment verified! API is live."
+            echo "  API  → https://placement-api-app.azurewebsites.net"
+            echo "  Docs → https://placement-api-app.azurewebsites.net/docs"
+          else
+            echo "Health check returned HTTP $STATUS — check Azure portal"
+            exit 1
+          fi
