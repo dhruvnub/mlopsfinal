@@ -1,0 +1,46 @@
+# ci.yml — Experiment 2 (Part 1)
+# Runs automatically on every push
+# No Azure needed — just installs, trains locally, tests
+
+name: CI — Test and Train
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-train:
+    name: Test and Train Locally
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Train model locally
+        run: python train.py
+        env:
+          MLFLOW_TRACKING_URI: mlruns
+
+      - name: Show metrics
+        run: cat models/metadata.json
+
+      - name: Upload model as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: |
+            models/model.pkl
+            models/metadata.json
+          retention-days: 3
