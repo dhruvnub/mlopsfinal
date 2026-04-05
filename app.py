@@ -7,17 +7,18 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-import joblib, json, os
+import pandas as pd
+import joblib
+import json
+import os
 
 app = FastAPI(
     title="Placement Prediction API",
-    description="ML inference API for student placement prediction. Deployed via Azure App Service.",
+    description="ML inference API for student placement prediction.",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
 )
 
-# CORS — required for ui.html to call this API from browser
+# CORS — allows ui.html to call this API from the browser
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,7 +26,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Safe lazy model loader ─────────────────────────────────────────────────
+FEATURES = [
+    "CGPA", "Internships", "Projects",
+    "AptitudeTestScore", "SoftSkillsRating",
+    "SSC_Marks", "HSC_Marks"
+]
+
+# Safe lazy loader — won't crash if model not trained yet
 _model    = None
 _metadata = {}
 
@@ -35,7 +42,7 @@ def load_model():
         if not os.path.exists("models/model.pkl"):
             raise HTTPException(
                 status_code=503,
-                detail="Model not ready. Run: python train.py"
+                detail="Model not found. Run: python train.py first."
             )
         _model = joblib.load("models/model.pkl")
         if os.path.exists("models/metadata.json"):
@@ -43,7 +50,7 @@ def load_model():
                 _metadata = json.load(f)
     return _model
 
-# ── Schemas ────────────────────────────────────────────────────────────────
+# Input schema
 class Student(BaseModel):
     CGPA:              float = Field(..., ge=0, le=10,  example=8.5)
     Internships:       int   = Field(..., ge=0, le=10,  example=2)
@@ -56,12 +63,12 @@ class Student(BaseModel):
 class BatchRequest(BaseModel):
     students: list[Student]
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
+# Endpoints
 @app.get("/", include_in_schema=False)
 def serve_ui():
     if os.path.exists("ui.html"):
         return FileResponse("ui.html")
-    return {"message": "Placement Prediction API", "docs": "/docs"}
+    return {"message": "Placement Prediction API running", "docs": "/docs"}
 
 @app.get("/health", tags=["System"])
 def health():
@@ -82,11 +89,12 @@ def model_info():
 @app.post("/predict", tags=["Inference"])
 def predict(student: Student):
     model = load_model()
-    X = [[
+    # Use DataFrame to avoid feature name warnings
+    X = pd.DataFrame([[
         student.CGPA, student.Internships, student.Projects,
         student.AptitudeTestScore, student.SoftSkillsRating,
         student.SSC_Marks, student.HSC_Marks,
-    ]]
+    ]], columns=FEATURES)
     pred  = model.predict(X)[0]
     proba = model.predict_proba(X)[0][1]
     return {
@@ -102,9 +110,11 @@ def predict_batch(batch: BatchRequest):
     model = load_model()
     results = []
     for s in batch.students:
-        X = [[s.CGPA, s.Internships, s.Projects,
-              s.AptitudeTestScore, s.SoftSkillsRating,
-              s.SSC_Marks, s.HSC_Marks]]
+        X = pd.DataFrame([[
+            s.CGPA, s.Internships, s.Projects,
+            s.AptitudeTestScore, s.SoftSkillsRating,
+            s.SSC_Marks, s.HSC_Marks,
+        ]], columns=FEATURES)
         pred  = model.predict(X)[0]
         proba = model.predict_proba(X)[0][1]
         results.append({
